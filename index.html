@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لعبة المشاعر - باتمان الدليل الصوتي</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Tone.js for background music -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <!-- Load Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Changa:wght@400;600;800&display=swap');
+        
+        /* Custom styles for engaging visuals and responsiveness */
+        body {
+            font-family: 'Changa', sans-serif; /* A clear, friendly Arabic font */
+            background: linear-gradient(135deg, #fef3c7 0%, #ffc0cb 100%); /* Soft gradient */
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        .star-bg {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+        }
+        
+        .star {
+            position: absolute;
+            background: #fff9e0;
+            border-radius: 50%;
+            opacity: 0.8;
+            animation: twinkle 5s infinite ease-in-out;
+        }
+
+        /* Generated stars to add visual interest */
+        .star:nth-child(1) { top: 10%; left: 5%; width: 15px; height: 15px; animation-delay: 0s; }
+        .star:nth-child(2) { top: 20%; right: 10%; width: 10px; height: 10px; animation-delay: 1.5s; }
+        .star:nth-child(3) { bottom: 5%; left: 15%; width: 8px; height: 8px; animation-delay: 3s; }
+        .star:nth-child(4) { bottom: 25%; right: 5%; width: 12px; height: 12px; animation-delay: 0.5s; }
+        .star:nth-child(5) { top: 40%; left: 30%; width: 18px; height: 18px; animation-delay: 2.2s; }
+        .star:nth-child(6) { top: 60%; right: 20%; width: 9px; height: 9px; animation-delay: 4s; }
+
+        @keyframes twinkle {
+            0%, 100% { transform: scale(0.5); opacity: 0.5; }
+            50% { transform: scale(1); opacity: 1; }
+        }
+
+        .screen-container {
+            transition: opacity 0.5s ease-in-out, transform 0.5s;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        .emotion-button {
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+        .emotion-button:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <!-- Star Background Graphics -->
+    <div class="star-bg">
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+        <div class="star"></div>
+    </div>
+    
+    <!-- Batman Guide & Voice Instruction Area -->
+    <div id="batman-guide" class="fixed top-4 right-4 z-50 flex items-center space-x-2 space-x-reverse bg-yellow-400 p-2 rounded-xl shadow-2xl border-4 border-yellow-600 transition duration-500" style="display: none;">
+        <!-- Batman Icon (using simple SVG outline to represent a stylized mask) -->
+        <div class="w-12 h-12 flex-shrink-0 text-gray-800 animate-bounce">
+            <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+                <path d="M12 1.5C6.201 1.5 1.5 6.201 1.5 12c0 5.093 3.66 9.38 8.5 10.383V16.5H7.5V14h2.5V12c0-2 1.5-3.5 3.5-3.5s3.5 1.5 3.5 3.5v2h-2.5v2.5h2.5V21.5c4.787-1.12 8.5-5.32 8.5-10.233C22.5 6.201 17.799 1.5 12 1.5zm-3 10.5h6v1h-6v-1z" fill="#000000"/>
+            </svg>
+        </div>
+        <div class="bg-white p-2 rounded-lg relative before:content-[''] before:absolute before:border-8 before:border-transparent before:border-r-white before:-right-4 before:top-1/2 before:-translate-y-1/2">
+            <p id="guide-instruction" class="text-gray-800 text-sm font-semibold whitespace-nowrap">جاري تحميل التعليمات...</p>
+        </div>
+    </div>
+
+    <div id="app-container" class="w-full max-w-lg mx-auto">
+        
+        <!-- Utility for screen switching and Audio/Voice Functions -->
+        <script>
+            // --- Global Variables and Constants ---
+            const apiKey = ""; // API key is provided by the environment
+            const ttsModel = "gemini-2.5-flash-preview-tts";
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const speechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            let userName = '';
+            let userGender = '';
+            let userAvatar = '';
+            let currentEmotion = null;
+
+            const instructions = {
+                'welcome-screen': 'مرحباً يا بطل! أنا باتمان، صديقك الخارق. أدخل اسمك لتنطلق معنا في المغامرة!',
+                'avatar-screen': 'هيا، اختر البطل الذي يمثلك! اضغط على الشخصية التي تحبها، ثم اضغط على زر "هذه شخصيتي!".',
+                'checkin-screen': 'أهلاً بك! قبل أن نبدأ اللعب، اختر الوجوه المعبرة عن شعورك الآن. فقط اضغط على وجه واحد.',
+                'main-menu': 'أنت مستعد للعب يا صديقي! اختر مستوى لتبدأ التعلم والمغامرات، أو اضغط على لوحة الإنجاز.',
+                'learning-screen': 'اسمع جيداً عن هذا الشعور! اضغط على أيقونة المشاعر لتتحدث عن نفسها، ثم اضغط على زر "التالي".',
+                'face-detection-screen': 'انظر إلى الكاميرا وحاول أن تصنع وجهاً سعيداً! كن بطلاً في التعبير!',
+                'challenge-screen': 'حان وقت التحدي! اقرأ السؤال واضغط على الإجابة الصحيحة لتكسب النقاط.',
+                'leaderboard-screen': 'هنا ترى ترتيبك بين الأبطال! كم نجمة ستحصل اليوم؟ عد إلى القائمة للمتابعة.'
+            };
+
+            // --- TTS Helper Functions (PCM to WAV) ---
+
+            function base64ToArrayBuffer(base64) {
+                const binaryString = window.atob(base64);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                return bytes.buffer;
+            }
+
+            function pcmToWav(pcm16, sampleRate) {
+                const numChannels = 1;
+                const bytesPerSample = 2; // 16-bit PCM
+                const blockAlign = numChannels * bytesPerSample;
+                const byteRate = sampleRate * blockAlign;
+                const dataSize = pcm16.length * bytesPerSample;
+                
+                const buffer = new ArrayBuffer(44 + dataSize);
+                const view = new DataView(buffer);
+
+                // RIFF identifier
+                writeString(view, 0, 'RIFF');
+                // file length (total - 8)
+                view.setUint32(4, 36 + dataSize, true);
+                // RIFF type
+                writeString(view, 8, 'WAVE');
+                // format chunk identifier
+                writeString(view, 12, 'fmt ');
+                // format chunk length
+                view.setUint32(16, 16, true);
+                // sample format (1 = PCM)
+                view.setUint16(20, 1, true);
+                // number of channels
+                view.setUint16(22, numChannels, true);
+                // sample rate
+                view.setUint32(24, sampleRate, true);
+                // byte rate
+                view.setUint32(28, byteRate, true);
+                // block align
+                view.setUint16(32, blockAlign, true);
+                // bits per sample
+                view.setUint16(34, 16, true);
+                // data chunk identifier
+                writeString(view, 36, 'data');
+                // data chunk length
+                view.setUint32(40, dataSize, true);
+
+                // Write PCM data
+                let offset = 44;
+                for (let i = 0; i < pcm16.length; i++) {
+                    view.setInt16(offset, pcm16[i], true);
+                    offset += 2;
+                }
+
+                return new Blob([buffer], { type: 'audio/wav' });
+
+                function writeString(view, offset, string) {
+                    for (let i = 0; i < string.length; i++) {
+                        view.setUint8(offset + i, string.charCodeAt(i));
+                    }
+                }
+            }
+
+            async function playAudio(base64AudioData, mimeType) {
+                try {
+                    const sampleRateMatch = mimeType.match(/rate=(\d+)/);
+                    if (!sampleRateMatch) throw new Error("Could not extract sample rate from mimeType.");
+                    
+                    const sampleRate = parseInt(sampleRateMatch[1], 10);
+                    const pcmData = base64ToArrayBuffer(base64AudioData);
+                    const pcm16 = new Int16Array(pcmData);
+                    const wavBlob = pcmToWav(pcm16, sampleRate);
+                    const audioUrl = URL.createObjectURL(wavBlob);
+                    
+                    const audio = new Audio(audioUrl);
+                    await audio.play();
+                } catch (error) {
+                    console.error("Error playing audio:", error);
+                }
+            }
+
+            // --- TTS API Logic (With Exponential Backoff) ---
+
+            async function speakGuideInstruction(text, speakerVoice = "Kore", attempt = 0) {
+                const guideElement = document.getElementById('batman-guide');
+                const instructionText = document.getElementById('guide-instruction');
+                
+                // Show guide and instruction
+                instructionText.textContent = text;
+                guideElement.style.display = 'flex';
+
+                const payload = {
+                    contents: [{ parts: [{ text: text }] }],
+                    generationConfig: {
+                        responseModalities: ["AUDIO"],
+                        speechConfig: {
+                            voiceConfig: {
+                                prebuiltVoiceConfig: { voiceName: speakerVoice }
+                            }
+                        }
+                    },
+                    model: ttsModel
+                };
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${apiKey}`;
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        if (response.status === 429 && attempt < 3) { // Retry on rate limit
+                            const delay = Math.pow(2, attempt) * 1000;
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            return speakGuideInstruction(text, speakerVoice, attempt + 1);
+                        }
+                        throw new Error(`API call failed with status: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    const part = result?.candidates?.[0]?.content?.parts?.[0];
+                    const audioData = part?.inlineData?.data;
+                    const mimeType = part?.inlineData?.mimeType;
+
+                    if (audioData && mimeType) {
+                        await playAudio(audioData, mimeType);
+                    } else {
+                        console.error("TTS response missing audio data.");
+                    }
+                } catch (error) {
+                    console.error("Failed to generate or play TTS audio:", error);
+                } finally {
+                    // Hide guide after a short delay
+                    setTimeout(() => {
+                        guideElement.style.display = 'none';
+                    }, 5000); // Keep it visible for 5 seconds
+                }
+            }
+            
+            // --- Screen Navigation and Core Logic ---
+
+            function showScreen(id) {
+                document.querySelectorAll('.screen-container').forEach(screen => {
+                    screen.classList.add('hidden');
+                    screen.style.opacity = '0';
+                    screen.style.transform = 'scale(0.95)';
+                });
+                
+                const targetScreen = document.getElementById(id);
+                if (targetScreen) {
+                    targetScreen.classList.remove('hidden');
+                    // Force repaint before applying opacity
+                    void targetScreen.offsetWidth;
+                    targetScreen.style.opacity = '1';
+                    targetScreen.style.transform = 'scale(1)';
+
+                    // Batman guide speaks instruction for the new screen
+                    const instruction = instructions[id] || 'مرحباً بك في شاشة جديدة! اضغط على الأزرار لترى ما سيحدث.';
+                    speakGuideInstruction(instruction);
+
+                    // Specific screen updates
+                    if (id === 'checkin-screen') {
+                        document.getElementById('checkin-prompt').innerText = `كيف تشعر اليوم يا ${userName || 'بطلنا'}؟`;
+                        currentEmotion = null; // Reset selection
+                        document.querySelectorAll('.emotion-button').forEach(btn => btn.classList.remove('ring-4', 'ring-pink-500'));
+                    }
+                    if (id === 'main-menu') {
+                        document.getElementById('menu-welcome').innerText = `أهلاً بك يا بطل ${userName || 'الخارق'}!`;
+                    }
+                }
+            }
+
+            // --- Voice/Speech Recognition Logic ---
+
+            function startVoiceInput(inputId) {
+                if (!speechRecognition) {
+                    speakGuideInstruction("عذراً يا بطل! خاصية الإدخال الصوتي غير متوفرة في متصفحك. يمكنك استخدام الكتابة العادية.");
+                    return;
+                }
+
+                const recognition = new speechRecognition();
+                recognition.lang = 'ar-AR';
+                recognition.interimResults = false;
+                recognition.maxAlternatives = 1;
+
+                const inputElement = document.getElementById(inputId);
+                const micIcon = document.getElementById(`mic-icon-${inputId}`);
+                
+                micIcon.classList.add('animate-pulse', 'text-red-600');
+                speakGuideInstruction("أستمع إليك! تكلم بوضوح الآن.");
+                
+                recognition.start();
+
+                recognition.onresult = (event) => {
+                    const speechResult = event.results[0][0].transcript;
+                    inputElement.value = speechResult;
+                    micIcon.classList.remove('animate-pulse', 'text-red-600');
+                    speakGuideInstruction(`أحسنت! لقد كتبت: ${speechResult}`);
+                };
+
+                recognition.onerror = (event) => {
+                    micIcon.classList.remove('animate-pulse', 'text-red-600');
+                    console.error('Speech recognition error:', event.error);
+                    speakGuideInstruction("لم أستطع سماعك بوضوح. حاول مرة أخرى!");
+                };
+            }
+
+            // --- Screen Specific Logic ---
+
+            function startApp() {
+                userName = document.getElementById('name-input').value.trim();
+                const gender = document.querySelector('input[name="gender"]:checked');
+                
+                if (!userName) {
+                    speakGuideInstruction('من فضلك أدخل اسمك أولاً يا بطل!');
+                    return;
+                }
+                if (!gender) {
+                    speakGuideInstruction('من فضلك اختر الجنس (ولد أو بنت) لتحديد شخصيتك!');
+                    return;
+                }
+                userGender = gender.value;
+                showScreen('avatar-screen');
+            }
+
+            function selectAvatar(avatarId) {
+                userAvatar = avatarId;
+                document.querySelectorAll('.avatar-card').forEach(card => {
+                    card.classList.remove('ring-4', 'ring-yellow-500', 'scale-110');
+                });
+                document.getElementById(`avatar-${avatarId}`).classList.add('ring-4', 'ring-yellow-500', 'scale-110');
+            }
+
+            function confirmAvatar() {
+                if (!userAvatar) {
+                    speakGuideInstruction('من فضلك اختر شخصية لتمثلك يا بطل!');
+                    return;
+                }
+                showScreen('checkin-screen');
+            }
+            
+            function selectEmotion(emotion, audioPrompt, button) {
+                currentEmotion = emotion;
+                // Visually select emotion
+                document.querySelectorAll('.emotion-button').forEach(btn => btn.classList.remove('ring-4', 'ring-pink-500', 'shadow-2xl'));
+                button.classList.add('ring-4', 'ring-pink-500', 'shadow-2xl');
+
+                // Batman confirms the choice
+                speakGuideInstruction(`أحسنت! لقد اخترت شعور ${audioPrompt}. الآن اضغط على زر "اكمل المغامرة" في الأسفل.`);
+            }
+
+            function recordAndNavigate() {
+                if (!currentEmotion) {
+                    speakGuideInstruction('من فضلك اختر شعوراً أولاً لتسجل إنجازك اليومي!');
+                    return;
+                }
+                speakGuideInstruction(`سجلنا شعورك! استعد للمغامرة في القائمة الرئيسية.`);
+                // In a real app, this would save the emotion and streak to the database
+                showScreen('main-menu');
+            }
+
+            function startLevel(level, levelName) {
+                 speakGuideInstruction(`تبدأ الآن المستوى ${level}. تعلم عن ${levelName}، ثم سنذهب إلى تحدي الكاميرا!`);
+                 showScreen('learning-screen');
+            }
+
+            // --- Initialization ---
+            document.addEventListener('DOMContentLoaded', () => {
+                showScreen('welcome-screen');
+                // Simple background music using Tone.js
+                try {
+                    const synth = new Tone.MembraneSynth().toDestination();
+                    const loop = new Tone.Loop(time => {
+                        synth.triggerAttackRelease("C4", "8n", time);
+                    }, "2n").start(0);
+                    Tone.Transport.start();
+                } catch (e) {
+                    console.warn("Tone.js failed to initialize:", e);
+                }
+            });
+        </script>
+
+        <!-- ======================================================= -->
+        <!-- 1. WELCOME SCREEN (شاشة الترحيب) -->
+        <!-- ======================================================= -->
+        <div id="welcome-screen" class="screen-container bg-white p-6 rounded-3xl shadow-2xl space-y-8">
+            <h1 class="text-4xl font-extrabold text-pink-600 text-center mt-4">مرحباً بك في عالم المشاعر!</h1>
+
+            <!-- Central Animated Avatar -->
+            <div class="flex justify-center">
+                <span class="text-[8rem] block animate-pulse">🌟</span>
+            </div>
+
+            <!-- Name Input with Voice Feature -->
+            <div class="space-y-3">
+                <label for="name-input" class="block text-xl font-bold text-teal-600 text-center">ما هو اسمك الجميل؟</label>
+                <div class="flex items-center space-x-2 space-x-reverse">
+                    <input type="text" id="name-input" placeholder="اكتب اسمك هنا"
+                           class="flex-grow p-4 border-4 border-pink-300 rounded-xl focus:border-teal-500 text-lg text-center transition duration-300">
+                    <button onclick="startVoiceInput('name-input')" class="p-3 bg-blue-500 text-white rounded-xl shadow-lg hover:bg-blue-600 flex items-center justify-center">
+                        <i id="mic-icon-name-input" class="fas fa-microphone text-2xl"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Gender Selection (Simplified) -->
+            <div class="space-y-4">
+                <p class="text-xl font-bold text-teal-600 text-center">أنا:</p>
+                <div class="flex justify-around gap-4">
+                    <label class="flex-1 cursor-pointer">
+                        <input type="radio" name="gender" value="boy" class="hidden peer">
+                        <div class="bg-blue-200 p-4 rounded-xl text-center shadow-lg peer-checked:bg-blue-500 peer-checked:text-white border-4 border-blue-500 peer-checked:border-blue-700 transition duration-300 transform hover:scale-105">
+                            <span class="text-5xl">🧑🏻‍🚀</span>
+                            <span class="block text-lg font-semibold mt-1">ولد</span>
+                        </div>
+                    </label>
+                    <label class="flex-1 cursor-pointer">
+                        <input type="radio" name="gender" value="girl" class="hidden peer">
+                        <div class="bg-pink-200 p-4 rounded-xl text-center shadow-lg peer-checked:bg-pink-500 peer-checked:text-white border-4 border-pink-500 peer-checked:border-pink-700 transition duration-300 transform hover:scale-105">
+                            <span class="text-5xl">👸🏻</span>
+                            <span class="block text-lg font-semibold mt-1">بنت</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Start Button -->
+            <button onclick="startApp()" class="w-full bg-pink-500 text-white p-4 rounded-full text-2xl font-bold shadow-xl hover:bg-pink-600 transform hover:scale-105 transition duration-300">
+                انطلق!
+            </button>
+        </div>
+
+        <!-- ======================================================= -->
+        <!-- 2. AVATAR SELECTION SCREEN (شاشة اختيار الشخصية) -->
+        <!-- ======================================================= -->
+        <div id="avatar-screen" class="screen-container hidden bg-white p-6 rounded-3xl shadow-2xl space-y-8">
+            <h2 class="text-3xl font-extrabold text-teal-600 text-center mt-4">اختر بطلك الخارق!</h2>
+            
+            <div class="grid grid-cols-3 gap-4">
+                <!-- Avatar Cards - Using Hero Emojis for style -->
+                <div id="avatar-1" onclick="selectAvatar(1)" class="avatar-card p-4 bg-red-100 rounded-2xl cursor-pointer text-center shadow-md transition duration-300 border-4 border-red-300">
+                    <span class="text-6xl block">🔥</span>
+                    <span class="text-md font-semibold mt-2 block">الناري</span>
+                </div>
+                <div id="avatar-2" onclick="selectAvatar(2)" class="avatar-card p-4 bg-blue-100 rounded-2xl cursor-pointer text-center shadow-md transition duration-300 border-4 border-blue-300">
+                    <span class="text-6xl block">🌊</span>
+                    <span class="text-md font-semibold mt-2 block">المائي</span>
+                </div>
+                <div id="avatar-3" onclick="selectAvatar(3)" class="avatar-card p-4 bg-green-100 rounded-2xl cursor-pointer text-center shadow-md transition duration-300 border-4 border-green-300">
+                    <span class="text-6xl block">🌲</span>
+                    <span class="text-md font-semibold mt-2 block">الأخضر</span>
+                </div>
+                <div id="avatar-4" onclick="selectAvatar(4)" class="avatar-card p-4 bg-yellow-100 rounded-2xl cursor-pointer text-center shadow-md transition duration-300 border-4 border-yellow-300">
+                    <span class="text-6xl block">⚡</span>
+                    <span class="text-md font-semibold mt-2 block">السريع</span>
+                </div>
+                <div id="avatar-5" onclick="selectAvatar(5)" class="avatar-card p-4 bg-purple-100 rounded-2xl cursor-pointer text-center shadow-md transition duration-300 border-4 border-purple-300">
+                    <span class="text-6xl block">🌌</span>
+                    <span class="text-md font-semibold mt-2 block">الفضائي</span>
+                </div>
+                <div id="avatar-6" onclick="selectAvatar(6)" class="avatar-card p-4 bg-orange-100 rounded-2xl cursor-pointer text-center shadow-md transition duration-300 border-4 border-orange-300">
+                    <span class="text-6xl block">☀️</span>
+                    <span class="text-md font-semibold mt-2 block">المشرق</span>
+                </div>
+            </div>
+
+            <!-- Confirm Button -->
+            <button onclick="confirmAvatar()" class="w-full bg-teal-500 text-white p-4 rounded-full text-2xl font-bold shadow-xl hover:bg-teal-600 transform hover:scale-105 transition duration-300 mt-6">
+                هذه شخصيتي!
+            </button>
+        </div>
+
+        <!-- ======================================================= -->
+        <!-- 3. DAILY EMOTION CHECK-IN SCREEN (شاشة فحص المشاعر) -->
+        <!-- ======================================================= -->
+        <div id="checkin-screen" class="screen-container hidden bg-white p-6 rounded-3xl shadow-2xl space-y-8">
+            <div class="text-center bg-yellow-100 p-4 rounded-2xl border-4 border-yellow-300">
+                <h2 id="checkin-prompt" class="text-3xl font-extrabold text-gray-800">كيف تشعر اليوم يا بطل؟</h2>
+            </div>
+
+            <!-- Emotion Grid: Minimized Text, Focus on Icons/Colors -->
+            <div class="grid grid-cols-3 gap-4">
+                <button onclick="selectEmotion('happy', 'السعادة', this)" class="emotion-button bg-green-200 p-4 rounded-2xl hover:bg-green-300 transform hover:scale-105">
+                    <span class="text-6xl block animate-bounce">😊</span>
+                    <span class="text-lg font-bold mt-1 text-green-800">سعيد</span>
+                </button>
+                <button onclick="selectEmotion('sad', 'الحزن', this)" class="emotion-button bg-blue-200 p-4 rounded-2xl hover:bg-blue-300 transform hover:scale-105">
+                    <span class="text-6xl block">😟</span>
+                    <span class="text-lg font-bold mt-1 text-blue-800">حزين</span>
+                </button>
+                <button onclick="selectEmotion('angry', 'الغضب', this)" class="emotion-button bg-red-200 p-4 rounded-2xl hover:bg-red-300 transform hover:scale-105">
+                    <span class="text-6xl block animate-shake">😡</span>
+                    <span class="text-lg font-bold mt-1 text-red-800">غاضب</span>
+                </button>
+                <button onclick="selectEmotion('scared', 'الخوف', this)" class="emotion-button bg-purple-200 p-4 rounded-2xl hover:bg-purple-300 transform hover:scale-105">
+                    <span class="text-6xl block">😨</span>
+                    <span class="text-lg font-bold mt-1 text-purple-800">خائف</span>
+                </button>
+                <button onclick="selectEmotion('surprised', 'الدهشة', this)" class="emotion-button bg-yellow-200 p-4 rounded-2xl hover:bg-yellow-300 transform hover:scale-105">
+                    <span class="text-6xl block">😲</span>
+                    <span class="text-lg font-bold mt-1 text-yellow-800">متفاجئ</span>
+                </button>
+                <button onclick="selectEmotion('tired', 'التعب', this)" class="emotion-button bg-gray-200 p-4 rounded-2xl hover:bg-gray-300 transform hover:scale-105">
+                    <span class="text-6xl block">😴</span>
+                    <span class="text-lg font-bold mt-1 text-gray-800">متعب</span>
+                </button>
+            </div>
+
+            <!-- Record/Next Button -->
+            <button onclick="recordAndNavigate()" class="w-full bg-pink-500 text-white p-4 rounded-full text-2xl font-bold shadow-xl hover:bg-pink-600 transform hover:scale-105 transition duration-300 mt-6">
+                اكمل المغامرة!
+            </button>
+            
+            <style>
+                @keyframes shake { 
+                    0%, 100% { transform: translateX(0); } 
+                    25% { transform: translateX(-5px); } 
+                    50% { transform: translateX(5px); } 
+                    75% { transform: translateX(-5px); }
+                }
+                .animate-shake { animation: shake 0.5s infinite; }
+            </style>
+        </div>
+
+        <!-- ======================================================= -->
+        <!-- 4. MAIN MENU (القائمة الرئيسية) -->
+        <!-- ======================================================= -->
+        <div id="main-menu" class="screen-container hidden bg-white p-6 rounded-3xl shadow-2xl space-y-6">
+            <h2 id="menu-welcome" class="text-3xl font-extrabold text-teal-600 text-center mt-4">أهلاً بك يا بطل!</h2>
+
+            <!-- Top Header Bar (Score/Leaderboard) -->
+            <div class="flex justify-between items-center bg-purple-100 p-3 rounded-xl shadow-inner border-2 border-purple-300">
+                <div class="flex items-center space-x-2 space-x-reverse">
+                    <span class="text-3xl text-red-500">🏆</span>
+                    <span class="text-lg font-bold text-gray-700">النقاط: 45 نجمة</span>
+                </div>
+                <button onclick="showScreen('leaderboard-screen')" class="flex items-center space-x-1 space-x-reverse text-purple-600 font-bold p-2 bg-purple-200 rounded-lg hover:bg-purple-300 transform hover:scale-105">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>لوحة الأبطال</span>
+                </button>
+            </div>
+
+            <!-- Levels Grid -->
+            <div class="grid grid-cols-2 gap-4">
+                <!-- Level 1: Basic Emotions -->
+                <button onclick="startLevel(1, 'المشاعر الأساسية')" class="bg-green-500 text-white p-6 rounded-2xl shadow-xl transform hover:scale-105 transition duration-300 space-y-2 border-4 border-green-700">
+                    <span class="text-5xl block">😊😠😨</span>
+                    <span class="text-xl font-bold">المستوى الأول</span>
+                </button>
+
+                <!-- Level 2: Mixed Feelings (Unlocked) -->
+                <button onclick="startLevel(2, 'المشاعر المختلطة')" class="bg-blue-500 text-white p-6 rounded-2xl shadow-xl transform hover:scale-105 transition duration-300 space-y-2 border-4 border-blue-700">
+                    <span class="text-5xl block">🤯😵‍💫</span>
+                    <span class="text-xl font-bold">المستوى الثاني</span>
+                </button>
+
+                <!-- Level 3: Reactions (Locked) -->
+                <div class="bg-gray-300 text-gray-600 p-6 rounded-2xl shadow-inner space-y-2 opacity-80 border-4 border-gray-400">
+                    <span class="text-5xl block">🔒</span>
+                    <span class="text-xl font-bold">المستوى الثالث</span>
+                </div>
+
+                <!-- Daily Check-in Button -->
+                <button onclick="showScreen('checkin-screen')" class="bg-yellow-500 text-gray-800 p-6 rounded-2xl shadow-xl hover:bg-yellow-600 transform hover:scale-105 transition duration-300 border-4 border-yellow-700">
+                    <span class="text-5xl block">🗓️</span>
+                    <span class="text-xl font-bold">فحص اليوم</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ======================================================= -->
+        <!-- 5. LEARNING SCREEN (شاشة التعلم - السعادة) -->
+        <!-- ======================================================= -->
+        <div id="learning-screen" class="screen-container hidden bg-white p-6 rounded-3xl shadow-2xl space-y-6">
+            <h2 class="text-3xl font-extrabold text-green-600 text-center mt-4 bg-green-100 p-3 rounded-xl border-4 border-green-300">شعور: السعادة (Happiness)</h2>
+
+            <div class="aspect-video bg-green-200 rounded-3xl flex items-center justify-center shadow-lg border-4 border-green-500">
+                 <!-- Place for interactive video/animation -->
+                <p class="text-2xl text-green-800 font-bold p-4">مكان عرض فيديو كرتوني عن السعادة</p>
+            </div>
+
+            <!-- Interactive Emotion Icon -->
+            <div class="flex items-center justify-center">
+                <button onclick="speakGuideInstruction('السعادة تجعلك تحب اللعب والضحك! اشعر بها في قلبك!', 'Leda')" class="w-40 h-40 bg-white rounded-full shadow-2xl flex items-center justify-center border-8 border-yellow-500 transform hover:scale-110 transition duration-300">
+                    <span class="text-[5rem] animate-pulse">😁</span>
+                </button>
+            </div>
+            <p class="text-center text-lg text-gray-700">اضغط على الوجه لتسمع عنه!</p>
+
+            <div class="flex justify-between gap-4">
+                <button onclick="showScreen('main-menu')" class="flex-1 bg-gray-400 text-white p-4 rounded-full text-lg font-bold shadow-xl hover:bg-gray-500 transform hover:scale-105 transition duration-300">
+                    <i class="fas fa-home"></i>
+                    <span>العودة للقائمة</span>
+                </button>
+                <button onclick="showScreen('face-detection-screen')" class="flex-1 bg-pink-500 text-white p-4 rounded-full text-lg font-bold shadow-xl hover:bg-pink-600 transform hover:scale-105 transition duration-300">
+                    <span>التالي: تحدي الكاميرا</span>
+                    <i class="fas fa-arrow-left mr-2"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- ======================================================= -->
+        <!-- 6. FACE DETECTION SCREEN (شاشة كشف التعبير) -->
+        <!-- ======================================================= -->
+        <div id="face-detection-screen" class="screen-container hidden bg-white p-6 rounded-3xl shadow-2xl space-y-6">
+            <h2 class="text-3xl font-extrabold text-blue-600 text-center mt-4 bg-blue-100 p-3 rounded-xl border-4 border-blue-300">تحدي تعابير الوجه</h2>
+
+            <p class="text-xl text-center text-gray-700 font-semibold p-2 bg-blue-50 rounded-lg border-2 border-blue-200">
+                وجهك بطل! الآن حاول أن تعبر عن شعور: <span class="text-pink-600 font-extrabold text-2xl">😊 السعادة 😊</span>
+            </p>
+
+            <!-- Camera Feed Placeholder -->
+            <div class="w-full aspect-square bg-gray-200 rounded-3xl border-4 border-dashed border-blue-400 flex flex-col items-center justify-center shadow-inner">
+                <i class="fas fa-camera text-blue-500 text-6xl"></i>
+                <p class="mt-2 text-blue-500 font-semibold">منطقة الكاميرا تنتظر وجهك المبتسم</p>
+            </div>
+
+            <!-- Feedback Area -->
+            <div id="feedback-area" class="bg-green-100 p-4 rounded-xl text-center border-4 border-green-400">
+                <p class="text-xl font-bold text-green-800">جاري الكشف... ابتسم يا بطل!</p>
+            </div>
+
+            <button onclick="showScreen('challenge-screen')" class="w-full bg-teal-500 text-white p-4 rounded-full text-2xl font-bold shadow-xl hover:bg-teal-600 transform hover:scale-105 transition duration-300">
+                انتقل إلى الاختبار
+            </button>
+        </div>
+
+        <!-- ======================================================= -->
+        <!-- 7. CHALLENGE/TEST SCREEN (شاشة التحدي والاختبار) -->
+        <!-- ======================================================= -->
+        <div id="challenge-screen" class="screen-container hidden bg-white p-6 rounded-3xl shadow-2xl space-y-6">
+            <h2 class="text-3xl font-extrabold text-pink-600 text-center mt-4 bg-pink-100 p-3 rounded-xl border-4 border-pink-300">تحدي اليوم!</h2>
+
+            <!-- Scenario Test (Question 1) -->
+            <div class="bg-purple-50 p-4 rounded-xl border-2 border-purple-300 space-y-3">
+                <p class="text-lg font-bold text-purple-800 text-center">السؤال (1/5):</p>
+                <p class="text-xl text-gray-800 font-semibold text-center">تخيل أن صديقك كسر لعبتك المفضلة. ما هو الشعور الأقرب إليك؟</p>
+                <div class="grid grid-cols-2 gap-3">
+                    <button class="p-3 bg-red-200 rounded-xl text-2xl font-bold hover:bg-red-300 transform hover:scale-105 transition duration-200">غضب 😡</button>
+                    <button class="p-3 bg-blue-200 rounded-xl text-2xl font-bold hover:bg-blue-300 transform hover:scale-105 transition duration-200">حزن 😟</button>
+                    <button class="p-3 bg-green-200 rounded-xl text-2xl font-bold hover:bg-green-300 transform hover:scale-105 transition duration-200">سعادة 😊</button>
+                    <button class="p-3 bg-yellow-200 rounded-xl text-2xl font-bold hover:bg-yellow-300 transform hover:scale-105 transition duration-200">خوف 😨</button>
+                </div>
+            </div>
+
+            <hr class="border-t-2 border-dashed border-gray-300">
+
+            <!-- Daily Reflection Challenge with Voice Input -->
+            <div class="space-y-3">
+                <h3 class="text-2xl font-bold text-teal-600 text-center">أخبرنا عن يومك!</h3>
+                <div class="flex items-center space-x-2 space-x-reverse">
+                    <textarea id="reflection-input" placeholder="مثال: شعرت بالبهجة عندما..."
+                              class="flex-grow p-3 border-4 border-teal-300 rounded-xl h-24 focus:border-teal-500 text-base"
+                    ></textarea>
+                    <button onclick="startVoiceInput('reflection-input')" class="self-start mt-1 p-3 bg-blue-500 text-white rounded-xl shadow-lg hover:bg-blue-600 flex items-center justify-center">
+                        <i id="mic-icon-reflection-input" class="fas fa-microphone text-2xl"></i>
+                    </button>
+                </div>
+            </div>
+
+            <button onclick="showScreen('main-menu')" class="w-full bg-pink-500 text-white p-4 rounded-full text-2xl font-bold shadow-xl hover:bg-pink-600 transform hover:scale-105 transition duration-300 mt-4">
+                أكملت التحدي!
+            </button>
+        </div>
+
+        <!-- ======================================================= -->
+        <!-- 8. LEADERBOARD/PROGRESS PAGE (صفحة المتصدرين والتقدم) -->
+        <!-- ======================================================= -->
+        <div id="leaderboard-screen" class="screen-container hidden bg-white p-6 rounded-3xl shadow-2xl space-y-6">
+            <h2 class="text-3xl font-extrabold text-yellow-600 text-center mt-4 bg-yellow-100 p-3 rounded-xl border-4 border-yellow-300">لوحة أبطال المشاعر</h2>
+
+            <!-- Personal Progress Summary -->
+            <div class="bg-white p-4 rounded-xl border-4 border-teal-400 shadow-xl space-y-2">
+                <h3 class="text-2xl font-bold text-teal-600 text-center">ملفك الشخصي</h3>
+                <div class="flex justify-around text-center">
+                    <div>
+                        <span class="text-5xl font-extrabold text-pink-500 block">3</span>
+                        <span class="text-sm text-gray-600">مستويات</span>
+                    </div>
+                    <div>
+                        <span class="text-5xl font-extrabold text-pink-500 block">45</span>
+                        <span class="text-sm text-gray-600">نجمة</span>
+                    </div>
+                    <div>
+                        <span class="text-5xl font-extrabold text-pink-500 block">🔥3</span>
+                        <span class="text-sm text-gray-600">أيام سلسلة</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Leaderboard Table -->
+            <div class="bg-white p-4 rounded-xl border-2 border-gray-200">
+                <h3 class="text-2xl font-bold text-gray-800 mb-3 text-center">🏆 الأبطال المتصدرون</h3>
+                <ul class="space-y-3">
+                    <li class="flex justify-between items-center p-3 bg-yellow-100 rounded-lg shadow-md border-r-8 border-yellow-500 transform hover:scale-[1.02] transition duration-200">
+                        <div class="flex items-center space-x-3 space-x-reverse">
+                            <span class="text-2xl font-extrabold text-yellow-700">1</span>
+                            <span class="text-3xl">🥇</span>
+                            <span class="text-lg font-bold text-gray-800">البطل أحمد</span>
+                        </div>
+                        <span class="text-xl font-bold text-yellow-700">52 نجمة</span>
+                    </li>
+                    <li class="flex justify-between items-center p-3 bg-gray-100 rounded-lg border-r-4 border-gray-400 transform hover:scale-[1.02] transition duration-200">
+                        <div class="flex items-center space-x-3 space-x-reverse">
+                            <span class="text-2xl font-extrabold text-gray-700">2</span>
+                            <span class="text-3xl">🥈</span>
+                            <span class="text-lg font-bold text-gray-800">البطلة سارة</span>
+                        </div>
+                        <span class="text-xl font-bold text-gray-700">48 نجمة</span>
+                    </li>
+                    <li class="flex justify-between items-center p-3 bg-pink-50 rounded-lg border-r-4 border-pink-500 font-bold transform hover:scale-[1.02] transition duration-200">
+                        <div class="flex items-center space-x-3 space-x-reverse">
+                            <span class="text-2xl font-extrabold text-pink-600">4</span>
+                            <span class="text-lg text-pink-600">أنت!</span>
+                        </div>
+                        <span class="text-xl font-bold text-pink-600">45 نجمة</span>
+                    </li>
+                </ul>
+            </div>
+
+            <button onclick="showScreen('main-menu')" class="w-full bg-teal-500 text-white p-4 rounded-full text-2xl font-bold shadow-xl hover:bg-teal-600 transform hover:scale-105 transition duration-300 mt-4">
+                العودة للقائمة
+            </button>
+        </div>
+    </div>
+</body>
+</html>
